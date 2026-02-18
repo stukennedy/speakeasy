@@ -63,7 +63,7 @@ function renderTagBar() {
     .map(
       (tag, i) =>
         `<span class="tag-pill inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-violet-500/20 text-violet-300 border border-violet-500/30 whitespace-nowrap">` +
-        `<span class="text-violet-400/70">${tag.facet}:</span>` +
+        `<span class="text-violet-300">${tag.facet}:</span>` +
         `<span>${tag.value}</span>` +
         `<button onclick="removeTag(${i})" class="ml-0.5 text-violet-400/60 hover:text-violet-300 transition-colors">` +
         `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>` +
@@ -148,7 +148,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       if (d.clearInput) {
         inp.value = "";
-        inp.focus();
+        inp.blur();
       }
     }
   }) as EventListener);

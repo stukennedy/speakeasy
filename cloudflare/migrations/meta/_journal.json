@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1771407237919,
+      "tag": "0000_colorful_excalibur",
+      "breakpoints": true
+    }
+  ]
+}

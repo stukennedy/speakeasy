@@ -1,11 +1,15 @@
-import type { ActiveTag, Env } from "../types";
+import { drizzle } from "drizzle-orm/d1";
+import { asc, desc, count, sql, and } from "drizzle-orm";
+import { httpLogs } from "@/db/schema";
+import type { HttpLog } from "@/db/schema";
+import type { ActiveTag } from "@/types";
 
 export const FACETS = [
-  { name: "method", field: "method" },
-  { name: "status", field: "status_code" },
-  { name: "domain", field: "domain" },
-  { name: "path", field: "path" },
-] as const;
+  { name: "method", field: "method", col: httpLogs.method },
+  { name: "status", field: "status_code", col: httpLogs.status_code },
+  { name: "domain", field: "domain", col: httpLogs.domain },
+  { name: "path", field: "path", col: httpLogs.path },
+];
 
 export const FACET_NAMES = FACETS.map((f) => f.name);
 
@@ -14,88 +18,81 @@ export function facetToField(facet: string): string | null {
   return f ? f.field : null;
 }
 
+function facetToCol(facet: string) {
+  const f = FACETS.find((x) => x.name === facet);
+  return f ? f.col : null;
+}
+
 /**
  * Get unique values for a facet, optionally filtered by prefix.
  * Respects active tags (filters the dataset first).
  */
 export async function getUniqueValues(
-  db: D1Database,
+  d1: D1Database,
   facet: string,
   prefix: string,
   activeTags: ActiveTag[]
 ): Promise<string[]> {
-  const field = facetToField(facet);
-  if (!field) return [];
+  const col = facetToCol(facet);
+  if (!col) return [];
 
-  let sql = `SELECT DISTINCT CAST(${field} AS TEXT) as val FROM http_logs`;
-  const params: string[] = [];
-  const wheres: string[] = [];
+  const db = drizzle(d1);
 
-  // Apply active tag filters
-  for (const tag of activeTags) {
-    const tagField = facetToField(tag.facet);
-    if (tagField) {
-      wheres.push(`CAST(${tagField} AS TEXT) = ?`);
-      params.push(tag.value);
-    }
-  }
+  const conditions = activeTags
+    .map((tag) => {
+      const tagCol = facetToCol(tag.facet);
+      return tagCol ? sql`CAST(${tagCol} AS TEXT) = ${tag.value}` : null;
+    })
+    .filter((c): c is NonNullable<typeof c> => c !== null);
 
-  // Apply prefix filter
   if (prefix) {
-    wheres.push(`CAST(${field} AS TEXT) LIKE ?`);
-    params.push(`%${prefix}%`);
+    conditions.push(sql`CAST(${col} AS TEXT) LIKE ${"%" + prefix + "%"}`);
   }
 
-  if (wheres.length > 0) {
-    sql += ` WHERE ${wheres.join(" AND ")}`;
-  }
-
-  sql += ` ORDER BY val ASC LIMIT 50`;
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const result = await db
-    .prepare(sql)
-    .bind(...params)
-    .all<{ val: string }>();
+    .selectDistinct({ val: sql<string>`CAST(${col} AS TEXT)` })
+    .from(httpLogs)
+    .where(where)
+    .orderBy(asc(sql`CAST(${col} AS TEXT)`))
+    .limit(50);
 
-  return result.results.map((r) => r.val);
+  return result.map((r) => r.val);
 }
 
 /**
- * Query logs with active tag filters
+ * Query logs with active tag filters.
  */
 export async function queryLogs(
-  db: D1Database,
+  d1: D1Database,
   activeTags: ActiveTag[],
   limit = 100,
   offset = 0
-): Promise<{ logs: any[]; total: number }> {
-  const wheres: string[] = [];
-  const params: string[] = [];
+): Promise<{ logs: HttpLog[]; total: number }> {
+  const db = drizzle(d1);
 
-  for (const tag of activeTags) {
-    const field = facetToField(tag.facet);
-    if (field) {
-      wheres.push(`CAST(${field} AS TEXT) = ?`);
-      params.push(tag.value);
-    }
-  }
+  const conditions = activeTags
+    .map((tag) => {
+      const col = facetToCol(tag.facet);
+      return col ? sql`CAST(${col} AS TEXT) = ${tag.value}` : null;
+    })
+    .filter((c): c is NonNullable<typeof c> => c !== null);
 
-  const whereClause =
-    wheres.length > 0 ? ` WHERE ${wheres.join(" AND ")}` : "";
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const countResult = await db
-    .prepare(`SELECT COUNT(*) as count FROM http_logs${whereClause}`)
-    .bind(...params)
-    .first<{ count: number }>();
+  const [{ total }] = await db
+    .select({ total: count() })
+    .from(httpLogs)
+    .where(where);
 
-  const total = countResult?.count ?? 0;
+  const logs = await db
+    .select()
+    .from(httpLogs)
+    .where(where)
+    .orderBy(desc(httpLogs.timestamp))
+    .limit(limit)
+    .offset(offset);
 
-  const logsResult = await db
-    .prepare(
-      `SELECT * FROM http_logs${whereClause} ORDER BY timestamp DESC LIMIT ? OFFSET ?`
-    )
-    .bind(...params, limit, offset)
-    .all();
-
-  return { logs: logsResult.results, total };
+  return { logs, total };
 }

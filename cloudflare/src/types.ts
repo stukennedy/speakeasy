@@ -1,13 +1,4 @@
-export interface HttpLog {
-  id: string;
-  method: string;
-  path: string;
-  status_code: number;
-  domain: string;
-  timestamp: string;
-  duration_ms: number | null;
-  body_size: number | null;
-}
+export type { HttpLog } from "@/db/schema";
 
 export interface Facet {
   name: string;

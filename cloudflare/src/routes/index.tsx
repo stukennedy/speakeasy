@@ -4,7 +4,7 @@ import type { Env } from "@/types";
 
 export const onRequestGet = async (c: Context<{ Bindings: Env }>) => {
   return c.render(
-    <div class="min-h-screen p-6">
+    <main class="min-h-screen p-6">
       <div class="max-w-6xl mx-auto">
         {/* Header */}
         <div class="mb-6">
@@ -14,7 +14,7 @@ export const onRequestGet = async (c: Context<{ Bindings: Env }>) => {
             </svg>
             Log Browser
           </h1>
-          <p class="text-sm text-gray-500 mt-1">
+          <p class="text-sm text-gray-400 mt-1">
             Filter HTTP logs using faceted search · HTMX 4 + WebSockets
           </p>
         </div>
@@ -26,12 +26,12 @@ export const onRequestGet = async (c: Context<{ Bindings: Env }>) => {
 
           {/* Log table — initial load from WS on connect */}
           <div id="log-table">
-            <div class="bg-[#111827]/80 border border-gray-700/40 rounded-lg p-12 text-center text-gray-500">
+            <div class="bg-[#111827]/80 border border-gray-700/40 rounded-lg p-12 text-center text-gray-400">
               Connecting…
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 };
