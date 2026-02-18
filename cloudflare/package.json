@@ -10,9 +10,8 @@
     "deploy": "vite build && wrangler deploy",
     "test": "bun test",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "wrangler d1 migrations apply log-browser-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply log-browser-db",
-    "db:seed": "wrangler d1 execute log-browser-db --local --file=./seed.sql"
+    "db:migrate": "wrangler d1 migrations apply log-browser-db",
+    "db:seed": "wrangler d1 execute log-browser-db --file=./seed.sql"
   },
   "dependencies": {
     "drizzle-kit": "^0.31.9",

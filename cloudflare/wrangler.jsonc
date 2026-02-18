@@ -9,7 +9,7 @@
     {
       "binding": "DB",
       "database_name": "log-browser-db",
-      "database_id": "local",
+      "database_id": "a2f4adde-1a77-4ad2-9fc0-96b41b6ad245",
       "migrations_dir": "migrations"
     }
   ],
