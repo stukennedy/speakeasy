@@ -1,6 +1,6 @@
 {
   "name": "speakeasy-log-browser",
-  "main": "src/index.tsx",
+  "main": "src/index.ts",
   "assets": {
     "directory": "public"
   },
