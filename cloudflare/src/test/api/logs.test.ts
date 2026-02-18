@@ -100,7 +100,7 @@ describe("GET /api/logs", () => {
     expect(html).toContain("Domain");
     expect(html).toContain("Path");
     expect(html).toContain("Duration");
-    expect(html).toContain("Timestamp");
+    expect(html).toContain("Time");
   });
 
   it("renders method badge colours", async () => {

@@ -1,26 +1,83 @@
 @import "tailwindcss";
 
 @theme {
-  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", "JetBrains Mono", ui-monospace, monospace;
+}
+
+:root {
+  --surface: rgba(255, 255, 255, 0.028);
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --border: rgba(255, 255, 255, 0.07);
+  --border-hover: rgba(255, 255, 255, 0.12);
 }
 
 body {
-  background: #0a0c14;
-  color: #c9d1d9;
+  background: #04060d;
+  color: #e2e8f0;
   font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
 }
 
+/* Stat cards */
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #475569;
+  font-family: var(--font-mono);
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+/* Search input */
 .search-input:focus {
   outline: none;
 }
 
+/* Dropdown */
 .dropdown-item.highlighted {
-  background: rgba(139, 92, 246, 0.15);
-  color: #c4b5fd;
+  background: rgba(34, 211, 238, 0.07);
+  color: #67e8f9;
 }
 
+/* Tag pills */
+.tag-pill {
+  transition: all 0.12s ease;
+}
+
+.tag-pill:hover {
+  background: rgba(34, 211, 238, 0.2);
+  border-color: rgba(34, 211, 238, 0.35);
+}
+
+/* Log rows */
+.log-row {
+  transition: background 0.08s ease;
+}
+
+.log-row:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Animations */
 .fade-in {
-  animation: fadeIn 0.15s ease-out;
+  animation: fadeIn 0.2s ease-out;
 }
 
 @keyframes fadeIn {
@@ -34,18 +91,36 @@ body {
   }
 }
 
-.tag-pill {
-  transition: all 0.15s ease;
+/* Live indicator ring */
+@keyframes liveRing {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 5px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
 }
 
-.tag-pill:hover {
-  filter: brightness(1.2);
+.live-ring {
+  animation: liveRing 2.2s ease-out infinite;
 }
 
-.log-row {
-  transition: background 0.1s ease;
+/* HTMX loading indicator */
+.htmx-indicator {
+  opacity: 0;
+  display: inline-flex;
+  transition: opacity 0.15s ease;
 }
 
-.log-row:hover {
-  background: rgba(255, 255, 255, 0.02);
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  opacity: 1;
+}
+
+/* AI input */
+.ai-input::placeholder {
+  color: #374151;
 }

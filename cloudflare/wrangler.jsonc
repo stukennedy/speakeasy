@@ -21,6 +21,9 @@
       }
     ]
   },
+  "ai": {
+    "binding": "AI"
+  },
   "migrations": [
     {
       "tag": "v1",
