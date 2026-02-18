@@ -1,0 +1,365 @@
+package templates
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+)
+
+type Tag struct {
+	Facet string
+	Value string
+}
+
+type HttpLog struct {
+	ID         string
+	Method     string
+	Path       string
+	StatusCode int
+	Domain     string
+	Timestamp  string
+	DurationMs int
+}
+
+func tagsToStr(tags []Tag) string {
+	var parts []string
+	for _, t := range tags {
+		parts = append(parts, t.Facet+":"+t.Value)
+	}
+	return strings.Join(parts, "|")
+}
+
+func fmtTime(ts string) string {
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return "—"
+	}
+	return t.Format("15:04:05")
+}
+
+templ HomePage() {
+	@Layout("Log Browser — Speakeasy") {
+		<div class="min-h-screen p-6">
+			<div class="max-w-6xl mx-auto">
+				<!-- Header -->
+				<div class="mb-6">
+					<h1 class="text-xl font-semibold text-white flex items-center gap-2">
+						<svg class="w-5 h-5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path>
+						</svg>
+						Log Browser
+					</h1>
+					<p class="text-sm text-gray-500 mt-1">Filter HTTP logs using faceted search · Datastar + SSE</p>
+				</div>
+
+				<div data-signals="{query: '', tags: '', highlightIdx: -1, dropdownOpen: false}">
+					<!-- Search bar -->
+					<div class="relative mb-4" id="search-container">
+						<div class="flex items-center bg-[#111827]/80 border border-gray-700/40 rounded-lg focus-within:border-violet-500/60 focus-within:ring-1 focus-within:ring-violet-500/20 transition-all">
+							<div id="tag-bar" class="flex items-center gap-1 pl-3 shrink-0 flex-wrap"></div>
+							<div class="pl-3 pr-2 text-gray-500">
+								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+								</svg>
+							</div>
+							<input
+								type="text"
+								id="search-input"
+								data-bind:query
+								data-on:input__debounce.150ms="$dropdownOpen = true; $highlightIdx = -1; @get('/api/suggest')"
+								data-on:focus="$dropdownOpen = true; @get('/api/suggest')"
+								data-on:keydown="
+									if (event.key === 'ArrowDown') {
+										event.preventDefault();
+										var items = document.querySelectorAll('.dropdown-item');
+										$highlightIdx = Math.min($highlightIdx + 1, items.length - 1);
+										items.forEach(function(el, i) { el.dataset.highlighted = (i === $highlightIdx) ? 'true' : 'false'; });
+										if (items[$highlightIdx]) items[$highlightIdx].scrollIntoView({ block: 'nearest' });
+									} else if (event.key === 'ArrowUp') {
+										event.preventDefault();
+										$highlightIdx = Math.max($highlightIdx - 1, 0);
+										var items = document.querySelectorAll('.dropdown-item');
+										items.forEach(function(el, i) { el.dataset.highlighted = (i === $highlightIdx) ? 'true' : 'false'; });
+										if (items[$highlightIdx]) items[$highlightIdx].scrollIntoView({ block: 'nearest' });
+									} else if (event.key === 'Enter') {
+										event.preventDefault();
+										var items = document.querySelectorAll('.dropdown-item');
+										if ($highlightIdx >= 0 && $highlightIdx < items.length) items[$highlightIdx].click();
+									} else if (event.key === 'Escape') {
+										$dropdownOpen = false;
+									} else if (event.key === 'Backspace' && $query === '' && $tags !== '') {
+										var parts = $tags.split('|');
+										parts.pop();
+										$tags = parts.join('|');
+										@get('/api/logs');
+									}
+								"
+								class="search-input flex-1 bg-transparent text-sm text-gray-200 placeholder-gray-500 py-2.5 pr-3 min-w-[200px]"
+								placeholder="Filter logs… type a facet (method, status, domain, path)"
+								autocomplete="off"
+							/>
+						</div>
+
+						<!-- Dropdown -->
+						<div
+							id="dropdown"
+							data-show="$dropdownOpen"
+							class="absolute z-50 top-full left-0 right-0 mt-1 bg-[#1a1d2e] border border-gray-700/50 rounded-lg shadow-xl shadow-black/40 overflow-hidden max-h-72 overflow-y-auto"
+						>
+							<div id="dropdown-content" class="py-1"></div>
+						</div>
+					</div>
+
+					<!-- Click outside to close -->
+					<div data-on:click__window="if (!event.target.closest('#search-container')) { $dropdownOpen = false; }"></div>
+
+					<!-- Tag bar (reactive, rendered client-side via signals) -->
+					<script>
+					{
+						// Watch $tags signal and render tag pills
+						const tagBarEl = document.getElementById('tag-bar');
+						const observer = new MutationObserver(() => {});
+						// We'll use Datastar's reactivity by watching a hidden element
+					}
+					</script>
+
+					<!-- Log table -->
+					<div id="log-table" data-on:load="@get('/api/logs')">
+						@LogTable(nil)
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<script>
+		// Tag management (works alongside Datastar signals)
+		function getSignalValue(name) {
+			// Access Datastar signal via the store
+			try {
+				return document.querySelector('[data-signals]').__ds?.signal(name)?.value || '';
+			} catch(e) { return ''; }
+		}
+
+		function setSignalValue(name, val) {
+			try {
+				document.querySelector('[data-signals]').__ds?.signal(name)?.set(val);
+			} catch(e) {}
+		}
+
+		function selectFacet(facet) {
+			var input = document.getElementById('search-input');
+			setSignalValue('query', facet + ':');
+			input.value = facet + ':';
+			input.focus();
+			setSignalValue('highlightIdx', -1);
+			// Trigger Datastar to fetch suggestions
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+		}
+
+		function addTag(facet, value) {
+			var current = getSignalValue('tags');
+			var newTags = current ? current + '|' + facet + ':' + value : facet + ':' + value;
+			setSignalValue('tags', newTags);
+			setSignalValue('query', '');
+			setSignalValue('dropdownOpen', false);
+			document.getElementById('search-input').value = '';
+			renderTagBar(newTags);
+			// Refresh table
+			var input = document.getElementById('search-input');
+			input.focus();
+		}
+
+		function removeTag(index) {
+			var current = getSignalValue('tags');
+			var parts = current.split('|').filter(function(_, i) { return i !== index; });
+			var newTags = parts.join('|');
+			setSignalValue('tags', newTags);
+			renderTagBar(newTags);
+		}
+
+		function renderTagBar(tagsStr) {
+			var bar = document.getElementById('tag-bar');
+			if (!tagsStr) { bar.innerHTML = ''; return; }
+			var tags = tagsStr.split('|').map(function(t) {
+				var idx = t.indexOf(':');
+				return { facet: t.slice(0, idx), value: t.slice(idx+1) };
+			});
+			bar.innerHTML = tags.map(function(tag, i) {
+				return '<span class="tag-pill inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-violet-500/20 text-violet-300 border border-violet-500/30 whitespace-nowrap">' +
+					'<span class="text-violet-400/70">' + tag.facet + ':</span>' +
+					'<span>' + tag.value + '</span>' +
+					'<button onclick="removeTag(' + i + ')" class="ml-0.5 text-violet-400/60 hover:text-violet-300 transition-colors">' +
+					'<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
+					'</button></span>';
+			}).join('');
+		}
+		</script>
+	}
+}
+
+// FacetList shows available facets
+templ FacetList(facets []string, query string) {
+	<div id="dropdown-content" class="py-1">
+		<div class="px-3 py-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Facets</div>
+		for _, facet := range facets {
+			<button
+				class="dropdown-item w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-violet-500/10 hover:text-violet-300 flex items-center gap-2 transition-colors cursor-pointer"
+				data-highlighted="false"
+				onclick={ templ.ComponentScript{Call: fmt.Sprintf("selectFacet('%s')", facet)} }
+			>
+				<span class="text-violet-400 font-mono text-xs px-1.5 py-0.5 bg-violet-500/10 rounded">{ facet }</span>
+				<span class="text-gray-500 text-xs">:</span>
+			</button>
+		}
+	</div>
+}
+
+// ValueList shows values for a facet
+templ ValueList(facet string, values []string) {
+	<div id="dropdown-content" class="py-1">
+		<div class="px-3 py-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+			{ facet } values
+		</div>
+		for i, value := range values {
+			<button
+				class="dropdown-item w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-violet-500/10 hover:text-violet-300 flex items-center gap-2 transition-colors cursor-pointer"
+				data-highlighted="false"
+				data-index={ strconv.Itoa(i) }
+				onclick={ templ.ComponentScript{Call: fmt.Sprintf("addTag('%s','%s')", facet, value)} }
+			>
+				<span class="font-mono text-xs">{ value }</span>
+				if facet == "method" {
+					@methodDot(value)
+				}
+				if facet == "status" {
+					@statusDot(value)
+				}
+			</button>
+		}
+	</div>
+}
+
+templ NoResults(message string) {
+	<div id="dropdown-content" class="py-1">
+		<div class="px-3 py-4 text-center text-sm text-gray-500">{ message }</div>
+	</div>
+}
+
+// LogTable renders the filtered log table
+templ LogTable(entries []HttpLog) {
+	<div id="log-table" class="bg-[#111827]/80 border border-gray-700/40 rounded-lg overflow-hidden fade-in">
+		<table class="w-full text-sm">
+			<thead>
+				<tr class="border-b border-gray-700/40">
+					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider w-20">Method</th>
+					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider w-20">Status</th>
+					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider w-40">Domain</th>
+					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Path</th>
+					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider w-24">Duration</th>
+					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider w-36">Timestamp</th>
+				</tr>
+			</thead>
+			<tbody class="divide-y divide-gray-800/40">
+				if entries == nil || len(entries) == 0 {
+					<tr>
+						<td colspan="6" class="px-4 py-12 text-center text-gray-500">
+							<div class="flex flex-col items-center gap-2">
+								<svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+								</svg>
+								if entries != nil {
+									<span>No logs match the current filters</span>
+								} else {
+									<span>Loading...</span>
+								}
+							</div>
+						</td>
+					</tr>
+				}
+				for _, log := range entries {
+					<tr class="log-row">
+						<td class="px-4 py-2.5">
+							@methodBadge(log.Method)
+						</td>
+						<td class={ "px-4 py-2.5 font-mono text-xs", statusColor(log.StatusCode) }>
+							{ strconv.Itoa(log.StatusCode) }
+						</td>
+						<td class="px-4 py-2.5 text-gray-400 font-mono text-xs">{ log.Domain }</td>
+						<td class="px-4 py-2.5 text-gray-300 font-mono text-xs">{ log.Path }</td>
+						<td class="px-4 py-2.5 text-gray-500 font-mono text-xs">
+							if log.DurationMs > 0 {
+								{ strconv.Itoa(log.DurationMs) }ms
+							} else {
+								—
+							}
+						</td>
+						<td class="px-4 py-2.5 text-gray-500 text-xs">{ fmtTime(log.Timestamp) }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+		<div class="px-4 py-2 border-t border-gray-700/40 text-xs text-gray-500">
+			if entries != nil {
+				{ strconv.Itoa(len(entries)) } { resultWord(len(entries)) }
+			}
+		</div>
+	</div>
+}
+
+func resultWord(n int) string {
+	if n == 1 { return "result" }
+	return "results"
+}
+
+func statusColor(code int) string {
+	if code >= 500 { return "text-red-400" }
+	if code >= 400 { return "text-amber-400" }
+	if code >= 300 { return "text-blue-400" }
+	if code >= 200 { return "text-emerald-400" }
+	return "text-gray-400"
+}
+
+templ methodBadge(method string) {
+	switch method {
+		case "GET":
+			<span class="px-1.5 py-0.5 text-[10px] font-bold rounded border bg-emerald-500/15 text-emerald-400 border-emerald-500/20">GET</span>
+		case "POST":
+			<span class="px-1.5 py-0.5 text-[10px] font-bold rounded border bg-blue-500/15 text-blue-400 border-blue-500/20">POST</span>
+		case "PUT":
+			<span class="px-1.5 py-0.5 text-[10px] font-bold rounded border bg-amber-500/15 text-amber-400 border-amber-500/20">PUT</span>
+		case "PATCH":
+			<span class="px-1.5 py-0.5 text-[10px] font-bold rounded border bg-orange-500/15 text-orange-400 border-orange-500/20">PATCH</span>
+		case "DELETE":
+			<span class="px-1.5 py-0.5 text-[10px] font-bold rounded border bg-red-500/15 text-red-400 border-red-500/20">DELETE</span>
+		default:
+			<span class="px-1.5 py-0.5 text-[10px] font-bold rounded border bg-gray-500/15 text-gray-400 border-gray-500/20">{ method }</span>
+	}
+}
+
+templ methodDot(method string) {
+	switch method {
+		case "GET":
+			<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+		case "POST":
+			<span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+		case "PUT":
+			<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+		case "PATCH":
+			<span class="w-1.5 h-1.5 rounded-full bg-orange-400"></span>
+		case "DELETE":
+			<span class="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+	}
+}
+
+templ statusDot(status string) {
+	if len(status) > 0 && status[0] == '2' {
+		<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+	} else if len(status) > 0 && status[0] == '3' {
+		<span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+	} else if len(status) > 0 && status[0] == '4' {
+		<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+	} else if len(status) > 0 && status[0] == '5' {
+		<span class="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+	}
+}

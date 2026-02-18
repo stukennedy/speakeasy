@@ -1,0 +1,30 @@
+{
+  "name": "speakeasy-log-browser",
+  "main": "src/index.tsx",
+  "assets": {
+    "directory": "public"
+  },
+  "compatibility_date": "2025-02-18",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "log-browser-db",
+      "database_id": "local",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SEARCH_SESSION",
+        "class_name": "SearchSession"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["SearchSession"]
+    }
+  ]
+}

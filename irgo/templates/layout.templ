@@ -1,0 +1,62 @@
+package templates
+
+var DevMode bool
+
+templ Layout(title string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+			<meta name="mobile-web-app-capable" content="yes"/>
+			<meta name="apple-mobile-web-app-capable" content="yes"/>
+			<title>{ title }</title>
+			<link rel="stylesheet" href="/static/css/output.css"/>
+			<script type="module" src="/static/js/datastar.js"></script>
+			<style>
+				body { background: #0a0c14; color: #c9d1d9; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+				.search-input:focus { outline: none; }
+				.dropdown-item[data-highlighted="true"] { background: rgba(139, 92, 246, 0.15); color: #c4b5fd; }
+				.fade-in { animation: fadeIn 0.15s ease-out; }
+				@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+				.tag-pill { transition: all 0.15s ease; }
+				.tag-pill:hover { filter: brightness(1.2); }
+				.log-row { transition: background 0.1s ease; }
+				.log-row:hover { background: rgba(255,255,255,0.02); }
+			</style>
+		</head>
+		<body class="min-h-screen">
+			{ children... }
+			if DevMode {
+				@livereloadScript()
+			}
+		</body>
+	</html>
+}
+
+templ livereloadScript() {
+	<script>
+(function() {
+  if (typeof window === 'undefined') return;
+  var buildTime = null;
+  var retryDelay = 1000;
+  var maxRetryDelay = 5000;
+  function connect() {
+    var es = new EventSource('/dev/livereload');
+    es.addEventListener('buildtime', function(e) {
+      var serverBuildTime = e.data;
+      if (buildTime !== null && buildTime !== serverBuildTime) { window.location.reload(); }
+      buildTime = serverBuildTime;
+      retryDelay = 1000;
+    });
+    es.addEventListener('reload', function(e) { window.location.reload(); });
+    es.onerror = function() {
+      es.close();
+      setTimeout(connect, retryDelay);
+      retryDelay = Math.min(retryDelay * 1.5, maxRetryDelay);
+    };
+  }
+  connect();
+})();
+</script>
+}
