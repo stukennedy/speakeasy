@@ -1,6 +1,7 @@
 /**
  * Client-side logic for the log browser.
- * Manages tag state, keyboard navigation, and WS form submission.
+ * Tag state management, keyboard navigation, WS form submission,
+ * and AI panel toggling.
  */
 
 // HTMX 4 + hx-ws loaded via public/ scripts in layout
@@ -31,6 +32,12 @@ function wsSuggest() {
   htmx.trigger($("suggest-form"), "suggest");
 }
 
+// Sync current tags string into the AI hidden input
+function syncAiTags(tagsStr: string) {
+  const el = $("ai-tags") as HTMLInputElement | null;
+  if (el) el.value = tagsStr;
+}
+
 // Exposed to onclick handlers in server-rendered HTML
 (window as any).selectFacet = (facet: string) => {
   input().value = facet + ":";
@@ -52,25 +59,30 @@ function wsSuggest() {
   htmx.trigger($("remove-tag-form"), "submit");
 };
 
-function refreshTable() {
-  ($("ws-refresh-tags") as HTMLInputElement).value = getTagsStr();
-  htmx.trigger($("refresh-form"), "submit");
-}
+// AI-driven filter application — replaces all active tags via WS
+(window as any).setTags = (tagsStr: string) => {
+  ($("ws-set-tags") as HTMLInputElement).value = tagsStr;
+  htmx.trigger($("set-tags-form"), "submit");
+};
 
-function renderTagBar() {
-  const bar = $("tag-bar");
-  bar.innerHTML = activeTags
-    .map(
-      (tag, i) =>
-        `<span class="tag-pill inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-violet-500/20 text-violet-300 border border-violet-500/30 whitespace-nowrap">` +
-        `<span class="text-violet-300">${tag.facet}:</span>` +
-        `<span>${tag.value}</span>` +
-        `<button onclick="removeTag(${i})" class="ml-0.5 text-violet-400/60 hover:text-violet-300 transition-colors">` +
-        `<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>` +
-        `</button></span>`
-    )
-    .join("");
-}
+(window as any).toggleAiPanel = () => {
+  const wrapper = $("ai-panel-wrapper");
+  const btn = $("ai-toggle-btn");
+  if (!wrapper) return;
+  const hidden = wrapper.classList.toggle("hidden");
+  if (btn) {
+    btn.style.background = hidden
+      ? "rgba(99,102,241,0.1)"
+      : "rgba(99,102,241,0.2)";
+    btn.style.borderColor = hidden
+      ? "rgba(99,102,241,0.25)"
+      : "rgba(99,102,241,0.4)";
+  }
+  if (!hidden) {
+    const aiInput = wrapper.querySelector<HTMLInputElement>("input[name='question']");
+    aiInput?.focus();
+  }
+};
 
 // --- Input events ---
 
@@ -111,13 +123,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Show/hide dropdown
+  // Show/hide dropdown based on content
   const observer = new MutationObserver(() => {
     dd.classList.toggle("hidden", !dd.innerHTML.trim());
   });
   observer.observe(dd, { childList: true, subtree: true });
 
-  // Close on outside click
+  // Close dropdown on outside click
   document.addEventListener("click", (e) => {
     if (!(e.target as HTMLElement).closest("#search-container")) {
       dd.innerHTML = "";
@@ -125,7 +137,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Reset highlight on new dropdown content
+  // Reset highlight when dropdown updates
   document.body.addEventListener("htmx:afterSwap", ((e: CustomEvent) => {
     const target = e.detail?.target;
     if (target === dd || target?.id === "dropdown") {
@@ -133,7 +145,22 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }) as EventListener);
 
-  // Handle state messages from WebSocket (non-ui channel)
+  // Auto-apply AI-suggested filters after the AI response swaps in
+  document.body.addEventListener("htmx:afterSwap", ((e: CustomEvent) => {
+    const target = e.detail?.target as HTMLElement | null;
+    if (target?.id === "ai-response") {
+      const autoEl = target.querySelector<HTMLElement>("[data-auto-filters]");
+      if (autoEl) {
+        const filtersStr = autoEl.getAttribute("data-auto-filters");
+        if (filtersStr) {
+          // Short delay so the chips render before the WS refresh
+          setTimeout(() => (window as any).setTags(filtersStr), 250);
+        }
+      }
+    }
+  }) as EventListener);
+
+  // Handle state messages from WebSocket
   document.body.addEventListener("htmx:wsMessage", ((e: CustomEvent) => {
     const d = e.detail;
     if (d?.channel === "state") {
@@ -144,7 +171,7 @@ document.addEventListener("DOMContentLoaded", () => {
               return { facet: t.slice(0, idx), value: t.slice(idx + 1) };
             })
           : [];
-        renderTagBar();
+        syncAiTags(d.tags ?? "");
       }
       if (d.clearInput) {
         inp.value = "";
