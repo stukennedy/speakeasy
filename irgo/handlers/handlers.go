@@ -105,6 +105,10 @@ func parseTags(tagsStr string) []Tag {
 	return tags
 }
 
+func AllLogs() []HttpLog {
+	return logs
+}
+
 func Mount(r *router.Router) {
 	// Suggest facets/values
 	r.DSGet("/api/suggest", func(ctx *router.Context) error {

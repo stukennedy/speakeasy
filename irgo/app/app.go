@@ -25,7 +25,7 @@ func NewRouter() *router.Router {
 
 	// Home page
 	r.GET("/", func(ctx *router.Context) (string, error) {
-		return Renderer.Render(templates.HomePage())
+		return Renderer.Render(templates.HomePage(handlers.AllLogs()))
 	})
 
 	// Mount handlers

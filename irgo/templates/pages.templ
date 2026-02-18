@@ -38,7 +38,7 @@ func fmtTime(ts string) string {
 	return t.Format("15:04:05")
 }
 
-templ HomePage() {
+templ HomePage(initialLogs []HttpLog) {
 	@Layout("Log Browser — Speakeasy") {
 		<div class="min-h-screen p-6">
 			<div class="max-w-6xl mx-auto">
@@ -50,7 +50,7 @@ templ HomePage() {
 						</svg>
 						Log Browser
 					</h1>
-					<p class="text-sm text-gray-500 mt-1">Filter HTTP logs using faceted search · Datastar + SSE</p>
+					<p class="text-sm text-gray-400 mt-1">Filter HTTP logs using faceted search · Datastar + SSE</p>
 				</div>
 
 				<div data-signals="{query: '', tags: '', highlightIdx: -1, dropdownOpen: false}">
@@ -58,7 +58,7 @@ templ HomePage() {
 					<div class="relative mb-4" id="search-container">
 						<div class="flex items-center bg-[#111827]/80 border border-gray-700/40 rounded-lg focus-within:border-violet-500/60 focus-within:ring-1 focus-within:ring-violet-500/20 transition-all">
 							<div id="tag-bar" class="flex items-center gap-1 pl-3 shrink-0 flex-wrap"></div>
-							<div class="pl-3 pr-2 text-gray-500">
+							<div class="pl-3 pr-2 text-gray-400">
 								<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
 								</svg>
@@ -92,6 +92,7 @@ templ HomePage() {
 										var parts = $tags.split('|');
 										parts.pop();
 										$tags = parts.join('|');
+										renderTagBar($tags);
 										@get('/api/logs');
 									}
 								"
@@ -114,68 +115,40 @@ templ HomePage() {
 					<!-- Click outside to close -->
 					<div data-on:click__window="if (!event.target.closest('#search-container')) { $dropdownOpen = false; }"></div>
 
-					<!-- Tag bar (reactive, rendered client-side via signals) -->
-					<script>
-					{
-						// Watch $tags signal and render tag pills
-						const tagBarEl = document.getElementById('tag-bar');
-						const observer = new MutationObserver(() => {});
-						// We'll use Datastar's reactivity by watching a hidden element
-					}
-					</script>
+					<!-- Hidden input bound to tags signal so vanilla JS can read/write it -->
+					<input type="hidden" id="tags-hidden" data-bind:tags />
+					<!-- Hidden trigger for refreshing logs from vanilla JS -->
+					<button id="refresh-logs" class="hidden" data-on:click="@get('/api/logs')"></button>
 
 					<!-- Log table -->
-					<div id="log-table" data-on:load="@get('/api/logs')">
-						@LogTable(nil)
+					<div>
+						@LogTable(initialLogs)
 					</div>
 				</div>
 			</div>
 		</div>
 
 		<script>
-		// Tag management (works alongside Datastar signals)
-		function getSignalValue(name) {
-			// Access Datastar signal via the store
-			try {
-				return document.querySelector('[data-signals]').__ds?.signal(name)?.value || '';
-			} catch(e) { return ''; }
-		}
-
-		function setSignalValue(name, val) {
-			try {
-				document.querySelector('[data-signals]').__ds?.signal(name)?.set(val);
-			} catch(e) {}
-		}
-
 		function selectFacet(facet) {
 			var input = document.getElementById('search-input');
-			setSignalValue('query', facet + ':');
 			input.value = facet + ':';
 			input.focus();
-			setSignalValue('highlightIdx', -1);
-			// Trigger Datastar to fetch suggestions
+			// Trigger Datastar to fetch suggestions via data-bind:query
 			input.dispatchEvent(new Event('input', { bubbles: true }));
 		}
 
-		function addTag(facet, value) {
-			var current = getSignalValue('tags');
-			var newTags = current ? current + '|' + facet + ':' + value : facet + ':' + value;
-			setSignalValue('tags', newTags);
-			setSignalValue('query', '');
-			setSignalValue('dropdownOpen', false);
-			document.getElementById('search-input').value = '';
-			renderTagBar(newTags);
-			// Refresh table
-			var input = document.getElementById('search-input');
-			input.focus();
-		}
-
 		function removeTag(index) {
-			var current = getSignalValue('tags');
+			var tagsInput = document.getElementById('tags-hidden');
+			var current = tagsInput.value;
 			var parts = current.split('|').filter(function(_, i) { return i !== index; });
 			var newTags = parts.join('|');
-			setSignalValue('tags', newTags);
+			// Update via hidden input so Datastar picks up the signal change
+			tagsInput.value = newTags;
+			tagsInput.dispatchEvent(new Event('input', { bubbles: true }));
 			renderTagBar(newTags);
+			// Refresh table via Datastar
+			document.getElementById('refresh-logs').click();
+			document.getElementById('search-input').blur();
 		}
 
 		function renderTagBar(tagsStr) {
@@ -201,7 +174,7 @@ templ HomePage() {
 // FacetList shows available facets
 templ FacetList(facets []string, query string) {
 	<div id="dropdown-content" class="py-1">
-		<div class="px-3 py-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Facets</div>
+		<div class="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Facets</div>
 		for _, facet := range facets {
 			<button
 				class="dropdown-item w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-violet-500/10 hover:text-violet-300 flex items-center gap-2 transition-colors cursor-pointer"
@@ -209,7 +182,7 @@ templ FacetList(facets []string, query string) {
 				onclick={ templ.ComponentScript{Call: fmt.Sprintf("selectFacet('%s')", facet)} }
 			>
 				<span class="text-violet-400 font-mono text-xs px-1.5 py-0.5 bg-violet-500/10 rounded">{ facet }</span>
-				<span class="text-gray-500 text-xs">:</span>
+				<span class="text-gray-400 text-xs">:</span>
 			</button>
 		}
 	</div>
@@ -218,7 +191,7 @@ templ FacetList(facets []string, query string) {
 // ValueList shows values for a facet
 templ ValueList(facet string, values []string) {
 	<div id="dropdown-content" class="py-1">
-		<div class="px-3 py-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+		<div class="px-3 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
 			{ facet } values
 		</div>
 		for i, value := range values {
@@ -226,7 +199,7 @@ templ ValueList(facet string, values []string) {
 				class="dropdown-item w-full px-3 py-2 text-left text-sm text-gray-300 hover:bg-violet-500/10 hover:text-violet-300 flex items-center gap-2 transition-colors cursor-pointer"
 				data-highlighted="false"
 				data-index={ strconv.Itoa(i) }
-				onclick={ templ.ComponentScript{Call: fmt.Sprintf("addTag('%s','%s')", facet, value)} }
+				data-on:click={ fmt.Sprintf("$tags = $tags !== '' ? $tags + '|%s:%s' : '%s:%s'; $query = ''; $dropdownOpen = false; document.getElementById('search-input').value = ''; renderTagBar($tags); document.getElementById('search-input').blur(); @get('/api/logs')", facet, value, facet, value) }
 			>
 				<span class="font-mono text-xs">{ value }</span>
 				if facet == "method" {
@@ -242,7 +215,7 @@ templ ValueList(facet string, values []string) {
 
 templ NoResults(message string) {
 	<div id="dropdown-content" class="py-1">
-		<div class="px-3 py-4 text-center text-sm text-gray-500">{ message }</div>
+		<div class="px-3 py-4 text-center text-sm text-gray-400">{ message }</div>
 	</div>
 }
 
@@ -252,18 +225,18 @@ templ LogTable(entries []HttpLog) {
 		<table class="w-full text-sm">
 			<thead>
 				<tr class="border-b border-gray-700/40">
-					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider w-20">Method</th>
-					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider w-20">Status</th>
-					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider w-40">Domain</th>
-					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Path</th>
-					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider w-24">Duration</th>
-					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider w-36">Timestamp</th>
+					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider w-20">Method</th>
+					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider w-20">Status</th>
+					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider w-40">Domain</th>
+					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Path</th>
+					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider w-24">Duration</th>
+					<th class="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider w-36">Timestamp</th>
 				</tr>
 			</thead>
 			<tbody class="divide-y divide-gray-800/40">
 				if entries == nil || len(entries) == 0 {
 					<tr>
-						<td colspan="6" class="px-4 py-12 text-center text-gray-500">
+						<td colspan="6" class="px-4 py-12 text-center text-gray-400">
 							<div class="flex flex-col items-center gap-2">
 								<svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
@@ -287,19 +260,19 @@ templ LogTable(entries []HttpLog) {
 						</td>
 						<td class="px-4 py-2.5 text-gray-400 font-mono text-xs">{ log.Domain }</td>
 						<td class="px-4 py-2.5 text-gray-300 font-mono text-xs">{ log.Path }</td>
-						<td class="px-4 py-2.5 text-gray-500 font-mono text-xs">
+						<td class="px-4 py-2.5 text-gray-400 font-mono text-xs">
 							if log.DurationMs > 0 {
 								{ strconv.Itoa(log.DurationMs) }ms
 							} else {
 								—
 							}
 						</td>
-						<td class="px-4 py-2.5 text-gray-500 text-xs">{ fmtTime(log.Timestamp) }</td>
+						<td class="px-4 py-2.5 text-gray-400 text-xs">{ fmtTime(log.Timestamp) }</td>
 					</tr>
 				}
 			</tbody>
 		</table>
-		<div class="px-4 py-2 border-t border-gray-700/40 text-xs text-gray-500">
+		<div class="px-4 py-2 border-t border-gray-700/40 text-xs text-gray-400">
 			if entries != nil {
 				{ strconv.Itoa(len(entries)) } { resultWord(len(entries)) }
 			}
