@@ -28,7 +28,7 @@ export const FacetList: FC<{ facets: string[] }> = ({ facets }) => (
   </div>
 );
 
-export const ValueList: FC<{ facet: string; values: string[] }> = ({ facet, values }) => (
+export const ValueList: FC<{ facet: string; values: string[]; prefix?: string }> = ({ facet, values, prefix }) => (
   <div id="dropdown-content">
     <div
       class="px-3 py-2"
@@ -36,6 +36,23 @@ export const ValueList: FC<{ facet: string; values: string[] }> = ({ facet, valu
     >
       {facet} values
     </div>
+    {prefix && (
+      <button
+        class="dropdown-item w-full px-3 py-2.5 text-left flex items-center gap-2.5 transition-colors cursor-pointer"
+        style="color:#64748b;border-bottom:1px dashed rgba(255,255,255,0.06)"
+        data-value={prefix}
+        data-index={-1}
+        onclick={`addTag('${facet}','${prefix}')`}
+      >
+        <span
+          class="px-1.5 py-0.5 rounded text-[9px] font-mono"
+          style="background:rgba(148,163,184,0.08);color:#64748b;border:1px dashed rgba(148,163,184,0.2)"
+        >
+          custom
+        </span>
+        <span class="font-mono text-xs">{prefix}</span>
+      </button>
+    )}
     {values.map((v, i) => (
       <button
         class="dropdown-item w-full px-3 py-2.5 text-left flex items-center gap-2.5 transition-colors cursor-pointer"

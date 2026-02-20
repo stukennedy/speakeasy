@@ -93,7 +93,7 @@ export class SearchSession extends DurableObject<Env> {
           const values = await getUniqueValues(this.env.DB, facet, prefix, activeTags);
           html = values.length === 0
             ? await jsxToString(NoResults({ message: "No matching values" }))
-            : await jsxToString(ValueList({ facet, values }));
+            : await jsxToString(ValueList({ facet, values, prefix: prefix || undefined }));
         }
       } else {
         const matching = FACET_NAMES.filter((f) => f.includes(query.toLowerCase()));

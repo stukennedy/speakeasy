@@ -24,8 +24,44 @@ function facetToCol(facet: string) {
 }
 
 /**
+ * Detect paths with common structure differing in one segment and return wildcard patterns.
+ */
+export function computePathWildcards(paths: string[]): string[] {
+  // Group paths by segment count
+  const byLength = new Map<number, string[][]>();
+  for (const p of paths) {
+    const segs = p.split("/");
+    const group = byLength.get(segs.length) ?? [];
+    group.push(segs);
+    byLength.set(segs.length, group);
+  }
+
+  const wildcards = new Set<string>();
+
+  for (const [segCount, segArrays] of byLength) {
+    // For each segment position (skip 0 which is always ""), replace with * and group
+    for (let pos = 1; pos < segCount; pos++) {
+      const byTemplate = new Map<string, Set<string>>();
+      for (const segs of segArrays) {
+        const template = segs.map((s, i) => (i === pos ? "*" : s)).join("/");
+        const original = segs.join("/");
+        const group = byTemplate.get(template) ?? new Set();
+        group.add(original);
+        byTemplate.set(template, group);
+      }
+      // Any template matching 2+ distinct paths is a valid wildcard
+      for (const [template, originals] of byTemplate) {
+        if (originals.size >= 2) wildcards.add(template);
+      }
+    }
+  }
+
+  return Array.from(wildcards).sort();
+}
+
+/**
  * Convert a single ActiveTag to a Drizzle SQL condition.
- * Supports status wildcards: 2xx, 3xx, 4xx, 5xx, 4xx+5xx
+ * Supports status wildcards (2xx, 3xx, 4xx, 5xx, 4xx+5xx) and path wildcards with *.
  */
 export function tagToCondition(tag: ActiveTag) {
   const f = FACETS.find((x) => x.name === tag.facet);
@@ -42,6 +78,12 @@ export function tagToCondition(tag: ActiveTag) {
       const hi = lo + 100;
       return sql`${httpLogs.status_code} >= ${lo} AND ${httpLogs.status_code} < ${hi}`;
     }
+  }
+
+  if (tag.facet === "path" && tag.value.includes("*")) {
+    const likePattern = tag.value.replace(/\*/g, "%");
+    const slashCount = (tag.value.match(/\//g) || []).length;
+    return sql`${httpLogs.path} LIKE ${likePattern} AND (length(${httpLogs.path}) - length(replace(${httpLogs.path}, '/', ''))) = ${slashCount}`;
   }
 
   return sql`CAST(${f.col} AS TEXT) = ${tag.value}`;
@@ -110,6 +152,15 @@ export async function getUniqueValues(
     const allWildcards = ["4xx+5xx", "2xx", "3xx", "4xx", "5xx"];
     const wildcards = prefix
       ? allWildcards.filter((w) => w[0] === prefix[0])
+      : allWildcards;
+    return [...wildcards, ...dbValues];
+  }
+
+  // Inject wildcard options for path facet
+  if (facet === "path") {
+    const allWildcards = computePathWildcards(dbValues);
+    const wildcards = prefix
+      ? allWildcards.filter((w) => w.includes(prefix))
       : allWildcards;
     return [...wildcards, ...dbValues];
   }
