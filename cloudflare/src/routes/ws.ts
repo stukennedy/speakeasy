@@ -10,6 +10,6 @@ export const onRequestGet = async (c: Context<{ Bindings: Env }>) => {
   );
   const stub = c.env.SEARCH_SESSION.get(id);
   return stub.fetch(
-    new Request(new URL("/ws", c.req.url), { headers: c.req.raw.headers })
+    new Request(new URL("/ws", c.req.url).href, { headers: c.req.raw.headers })
   );
 };
